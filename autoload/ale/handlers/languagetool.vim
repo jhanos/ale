@@ -17,46 +17,44 @@ function! ale#handlers#languagetool#GetCommand(buffer) abort
 endfunction
 
 function! ale#handlers#languagetool#HandleOutput(buffer, lines) abort
-    " Match lines like:
-    " 1.) Line 5, column 1, Rule ID:
-    let l:head_pattern = '^\v.+.\) Line (\d+), column (\d+), Rule ID. (.+)$'
-    let l:head_matches = ale#util#GetMatches(a:lines, l:head_pattern)
-
-    " Match lines like:
-    " Message: Did you forget a comma after a conjunctive/linking adverb?
-    let l:message_pattern = '^\vMessage. (.+)$'
-    let l:message_matches = ale#util#GetMatches(a:lines, l:message_pattern)
-
-    " Match lines like:
-    "   ^^^^^ "
-    let l:markers_pattern = '^\v *(\^+) *$'
-    let l:markers_matches = ale#util#GetMatches(a:lines, l:markers_pattern)
-
-    let l:output = []
-
-
-    " Okay tbh I was to lazy to figure out a smarter solution here
-    " We just check that the arrays are same sized and merge everything
-    " together
+    let l:lines = type(a:lines) is v:t_list ? a:lines : [a:lines]
     let l:i = 0
+    let l:j = 0
+    let l:output = []
+    while l:i < len(l:lines)
+        let l:message = ""
+        let l:suggestion = ""
 
-    while l:i < len(l:head_matches)
-    \   && (
-    \       (len(l:head_matches) == len(l:markers_matches))
-    \       && (len(l:head_matches) == len(l:message_matches))
-    \   )
-        let l:item = {
-        \   'lnum'    : str2nr(l:head_matches[l:i][1]),
-        \   'col'     : str2nr(l:head_matches[l:i][2]),
-        \   'end_col' : str2nr(l:head_matches[l:i][2]) + len(l:markers_matches[l:i][1])-1,
-        \   'type'    : 'W',
-        \   'code'    : l:head_matches[l:i][3],
-        \   'text'    : l:message_matches[l:i][1]
-        \}
-        call add(l:output, l:item)
+        let l:head_pattern = '^\v.+.\) Line (\d+), column (\d+), Rule ID. (.+) premium:.*$'
+        let l:head_match = matchlist(l:lines[l:i], l:head_pattern)
+        if !empty(l:head_match)
+            let l:lnum = str2nr(l:head_match[1])
+            let l:col = str2nr(l:head_match[2])
+            let l:code = l:head_match[3]
+            let l:i+=1
+            let l:message_pattern = '^\vMessage. (.+)$'
+            let l:message_match = matchlist(l:lines[l:i], l:message_pattern)
+            if !empty(l:message_match)
+                let l:message = l:message_match[0]
+                let l:i+=1
+            endif
+            let l:suggestion_pattern = '^\vSuggestion. (.+)$'
+            let l:suggestion_match = matchlist(l:lines[l:i], l:suggestion_pattern)
+            if !empty(l:suggestion_match)
+                let l:suggestion = l:suggestion_match[0]
+                let l:i+=1
+            endif
+            let l:i+=1
+            let l:markers_pattern = '^\v *(\^+) *$'
+            let l:markers_match = matchlist(l:lines[l:i], l:markers_pattern)
+            let l:end_col = str2nr(l:col + len(l:markers_match[1]))
+            let l:text = l:message . " " . l:suggestion
+            let l:item = { 'lnum': l:lnum, 'col': l:col, 'end_col': l:end_col, 'type': 'W', 'code': l:code, 'text': l:text }
+            call add(l:output, l:item)
+            let l:j+=1
+        endif
         let l:i+=1
     endwhile
-
     return l:output
 endfunction
 
